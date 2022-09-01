@@ -44,6 +44,7 @@ const channelContent = coda.makeObjectSchema({
     visibility: { type: coda.ValueType.String },
     source: {
       type: coda.ValueType.Object,
+      displayProperty: "url",
       properties: {
         url: { type: coda.ValueType.String, codaType: coda.ValueHintType.Url },
         title: { type: coda.ValueType.String },
@@ -57,38 +58,42 @@ const channelContent = coda.makeObjectSchema({
       },
     },
     image: {
-      type: coda.ValueType.Object,
-      displayProperty: "display",
-      properties: {
-        filename: { type: coda.ValueType.String },
-        content_type: { type: coda.ValueType.String },
-        updated_at: { type: coda.ValueType.String },
-        thumb: {
-          type: coda.ValueType.String,
-          codaType: coda.ValueHintType.ImageReference,
-        },
-        square: {
-          type: coda.ValueType.String,
-          codaType: coda.ValueHintType.ImageReference,
-        },
-        display: {
-          type: coda.ValueType.String,
-          codaType: coda.ValueHintType.ImageReference,
-        },
-        large: {
-          type: coda.ValueType.String,
-          codaType: coda.ValueHintType.ImageReference,
-        },
-        original: {
-          type: coda.ValueType.Object,
-          properties: {
-            url: { type: coda.ValueType.String },
-            file_size: { type: coda.ValueType.Number },
-            file_size_display: { type: coda.ValueType.String },
-          },
-        },
-      },
+      type: coda.ValueType.String,
+      codaType: coda.ValueHintType.ImageReference,
     },
+    // image: {
+    //   type: coda.ValueType.Object,
+    //   displayProperty: "display",
+    //   properties: {
+    //     filename: { type: coda.ValueType.String },
+    //     content_type: { type: coda.ValueType.String },
+    //     updated_at: { type: coda.ValueType.String },
+    //     thumb: {
+    //       type: coda.ValueType.String,
+    //       codaType: coda.ValueHintType.ImageReference,
+    //     },
+    //     square: {
+    //       type: coda.ValueType.String,
+    //       codaType: coda.ValueHintType.ImageReference,
+    //     },
+    //     display: {
+    //       type: coda.ValueType.String,
+    //       codaType: coda.ValueHintType.ImageReference,
+    //     },
+    //     large: {
+    //       type: coda.ValueType.String,
+    //       codaType: coda.ValueHintType.ImageReference,
+    //     },
+    //     original: {
+    //       type: coda.ValueType.Object,
+    //       properties: {
+    //         url: { type: coda.ValueType.String },
+    //         file_size: { type: coda.ValueType.Number },
+    //         file_size_display: { type: coda.ValueType.String },
+    //       },
+    //     },
+    //   },
+    // },
     embed: {
       type: coda.ValueType.Object,
       properties: {
@@ -147,6 +152,7 @@ const channelContent = coda.makeObjectSchema({
     connected_by_user_id: { type: coda.ValueType.Number },
     connected_by_username: { type: coda.ValueType.String },
     connected_by_user_slug: { type: coda.ValueType.String },
+    channel: { type: coda.ValueType.String },
   },
   featuredProperties: [
     "description",
@@ -307,13 +313,7 @@ function maybeParseChannelIdentifierFromUrl(maybeChannelUrl: string): string {
 function parseRawContentsIntoCodaChannelContents(rawChannel: any): object {
   return {
     ...rawChannel,
-    image: {
-      ...rawChannel?.image,
-      thumb: rawChannel?.image?.thumb?.url,
-      square: rawChannel?.image?.square?.url,
-      display: rawChannel?.image?.display?.url,
-      large: rawChannel?.image?.large?.url,
-    },
+    image: rawChannel?.image?.display?.url,
   };
 }
 
@@ -326,27 +326,63 @@ async function listChannels([], context: coda.ExecutionContext) {
   return { result: items };
 }
 
-async function getChannel([channelId], context: coda.ExecutionContext) {
+async function getChannel([channelInput], context: coda.ExecutionContext) {
+  const channelId = maybeParseChannelIdentifierFromUrl(channelInput);
   const response = await context.fetcher.fetch({
     method: "GET",
-    url: `${BaseApiUrl}/channels/${channelId}`,
+    url: apiUrl(`/channels/${channelId}`),
   });
   const item = response.body;
-  return { result: item };
+  return item;
+}
+
+export function apiUrl(path: string, params?: Record<string, any>): string {
+  const url = `${BaseApiUrl}${path}`;
+  return coda.withQueryParams(url, params || {});
+}
+
+function nextUrlFromResponse(
+  path: string,
+  params: Record<string, any>,
+  response: coda.FetchResponse<any>
+): string | undefined {
+  const { page, length, per } = response.body;
+  console.log("page, length, per", page, length, per);
+  if (page * per < length) {
+    console.log(page + 1);
+    return apiUrl(path, { ...params, page: page + 1 });
+  }
 }
 
 async function getChannelContents(
   [channelInput],
   context: coda.ExecutionContext
 ) {
+  const continuation = context.sync.continuation;
   const channelId = maybeParseChannelIdentifierFromUrl(channelInput);
+  const basePath = `/channels/${channelId}`;
+  console.log(continuation);
+  const url = continuation
+    ? (continuation.nextUrl as string)
+    : apiUrl(basePath);
+
   const response = await context.fetcher.fetch({
     method: "GET",
-    url: `${BaseApiUrl}/channels/${channelId}/contents`,
+    url,
   });
-  console.log(response.body.contents);
+  const nextUrl = nextUrlFromResponse(basePath, {}, response);
+  const channelTitle = response.body.title;
+
+  console.log(nextUrl);
+
   return {
-    result: response.body.contents.map(parseRawContentsIntoCodaChannelContents),
+    result: response.body.contents.map((channel) =>
+      parseRawContentsIntoCodaChannelContents({
+        ...channel,
+        channel: channelTitle,
+      })
+    ),
+    continuation: nextUrl ? { nextUrl } : undefined,
   };
 }
 
@@ -386,4 +422,18 @@ pack.addSyncTable({
   },
   // The resultType defines what will be returned in your Coda doc. Here, we're returning a simple text string.
   schema: channelContent,
+});
+
+pack.addFormula({
+  name: "Channel",
+  description: "Get a channel by ID or slug",
+  parameters: [channelParameter],
+  execute: getChannel,
+  resultType: coda.ValueType.Object,
+  schema: channel,
+});
+
+pack.addColumnFormat({
+  name: "Channel",
+  formulaName: "Channel",
 });
