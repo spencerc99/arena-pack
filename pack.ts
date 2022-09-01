@@ -291,7 +291,7 @@ async function getChannel([channelInput], context: coda.ExecutionContext) {
     url: apiUrl(`/channels/${channelId}`),
   });
   const item = response.body;
-  return item;
+  return parseChannelIntoCodaChannel(item);
 }
 
 export function apiUrl(path: string, params?: Record<string, any>): string {
