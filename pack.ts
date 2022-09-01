@@ -207,9 +207,18 @@ const channel = coda.makeObjectSchema({
   properties: {
     id: { type: coda.ValueType.Number },
     title: { type: coda.ValueType.String },
-    created_at: { type: coda.ValueType.String },
-    updated_at: { type: coda.ValueType.String },
-    added_to_at: { type: coda.ValueType.String },
+    updated_at: {
+      type: coda.ValueType.String,
+      codaType: coda.ValueHintType.DateTime,
+    },
+    created_at: {
+      type: coda.ValueType.String,
+      codaType: coda.ValueHintType.DateTime,
+    },
+    added_to_at: {
+      type: coda.ValueType.String,
+      codaType: coda.ValueHintType.DateTime,
+    },
     published: { type: coda.ValueType.Boolean },
     open: { type: coda.ValueType.Boolean },
     collaboration: { type: coda.ValueType.Boolean },
@@ -218,89 +227,34 @@ const channel = coda.makeObjectSchema({
     length: { type: coda.ValueType.Number },
     kind: { type: coda.ValueType.String },
     status: { type: coda.ValueType.String },
-    user_id: { type: coda.ValueType.Number },
-    manifest: {
-      type: coda.ValueType.Object,
-      properties: {
-        key: { type: coda.ValueType.String },
-        AWSAccessKeyId: { type: coda.ValueType.String },
-        bucket: { type: coda.ValueType.String },
-        success_action_status: { type: coda.ValueType.String },
-        policy: { type: coda.ValueType.String },
-        acl: { type: coda.ValueType.String },
-        signature: { type: coda.ValueType.String },
-        expires: { type: coda.ValueType.String },
-      },
-    },
+    // manifest: {
+    //   type: coda.ValueType.Object,
+    //   properties: {
+    //     key: { type: coda.ValueType.String },
+    //     AWSAccessKeyId: { type: coda.ValueType.String },
+    //     bucket: { type: coda.ValueType.String },
+    //     success_action_status: { type: coda.ValueType.String },
+    //     policy: { type: coda.ValueType.String },
+    //     acl: { type: coda.ValueType.String },
+    //     signature: { type: coda.ValueType.String },
+    //     expires: { type: coda.ValueType.String },
+    //   },
+    // },
     contents: { type: coda.ValueType.Array, items: channelContent },
     base_class: { type: coda.ValueType.String },
-    page: { type: coda.ValueType.Number },
-    per: { type: coda.ValueType.Number },
     collaborators: { type: coda.ValueType.Array, items: collaboratorSchema },
     follower_count: { type: coda.ValueType.Number },
     share_link: { type: coda.ValueType.String },
-    metadata: {
-      type: coda.ValueType.Object,
-      properties: { description: { type: coda.ValueType.String } },
-    },
+    description: { type: coda.ValueType.String },
     class_name: { type: coda.ValueType.String },
     can_index: { type: coda.ValueType.Boolean },
     nsfw: { type: coda.ValueType.Boolean },
-    owner: {
-      type: coda.ValueType.Object,
-      properties: {
-        id: { type: coda.ValueType.Number },
-        class: { type: coda.ValueType.String },
-        base_class: { type: coda.ValueType.String },
-        created_at: { type: coda.ValueType.String },
-        updated_at: { type: coda.ValueType.String },
-        name: { type: coda.ValueType.String },
-        description: { type: coda.ValueType.String },
-        visibility: { type: coda.ValueType.Number },
-        slug: { type: coda.ValueType.String },
-      },
-    },
-    user: {
-      type: coda.ValueType.Object,
-      properties: {
-        id: { type: coda.ValueType.Number },
-        created_at: { type: coda.ValueType.String },
-        slug: { type: coda.ValueType.String },
-        username: { type: coda.ValueType.String },
-        first_name: { type: coda.ValueType.String },
-        last_name: { type: coda.ValueType.String },
-        full_name: { type: coda.ValueType.String },
-        avatar: { type: coda.ValueType.String },
-        avatar_image: {
-          type: coda.ValueType.Object,
-          properties: {
-            thumb: { type: coda.ValueType.String },
-            display: { type: coda.ValueType.String },
-          },
-        },
-        channel_count: { type: coda.ValueType.Number },
-        following_count: { type: coda.ValueType.Number },
-        profile_id: { type: coda.ValueType.Number },
-        follower_count: { type: coda.ValueType.Number },
-        initials: { type: coda.ValueType.String },
-        can_index: { type: coda.ValueType.Boolean },
-        metadata: { type: coda.ValueType.Object, properties: {} },
-        is_premium: { type: coda.ValueType.Boolean },
-        is_lifetime_premium: { type: coda.ValueType.Boolean },
-        is_supporter: { type: coda.ValueType.Boolean },
-        is_exceeding_connections_limit: { type: coda.ValueType.Boolean },
-        is_confirmed: { type: coda.ValueType.Boolean },
-        is_pending_reconfirmation: { type: coda.ValueType.Boolean },
-        is_pending_confirmation: { type: coda.ValueType.Boolean },
-        badge: { type: coda.ValueType.String },
-        base_class: { type: coda.ValueType.String },
-        class: { type: coda.ValueType.String },
-      },
-    },
+    owner: collaboratorSchema,
+    user: collaboratorSchema,
   },
 });
 // Regex to match https://www.are.na/chakra/speculative-emergent-world-building
-const ArenaChannelRegex = /[https:\/\/]?[www\.]?are\.na\/\w+\/([\w-]+)/;
+const ArenaChannelRegex = /[https:\/\/]?[www\.]?are\.na\/[\w-]+\/([\w-]+)/;
 
 function maybeParseChannelIdentifierFromUrl(maybeChannelUrl: string): string {
   if (ArenaChannelRegex.test(maybeChannelUrl)) {
@@ -324,6 +278,10 @@ async function listChannels([], context: coda.ExecutionContext) {
   });
   const items = response.body;
   return { result: items };
+}
+
+function parseChannelIntoCodaChannel(channel): object {
+  return { ...channel, description: channel.metadata?.description };
 }
 
 async function getChannel([channelInput], context: coda.ExecutionContext) {
