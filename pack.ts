@@ -255,6 +255,7 @@ const channel = coda.makeObjectSchema({
 });
 // Regex to match https://www.are.na/chakra/speculative-emergent-world-building
 const ArenaChannelRegex = /[https:\/\/]?[www\.]?are\.na\/[\w-]+\/([\w-]+)/;
+const ArenaUserRegex = /[https:\/\/]?[www\.]?are\.na\/[\w-]+/;
 
 function maybeParseChannelIdentifierFromUrl(maybeChannelUrl: string): string {
   if (ArenaChannelRegex.test(maybeChannelUrl)) {
@@ -264,7 +265,22 @@ function maybeParseChannelIdentifierFromUrl(maybeChannelUrl: string): string {
   return maybeChannelUrl;
 }
 
+function maybeParseUserIdentifierFromUrl(maybeUserUrl: string): string {
+  if (ArenaUserRegex.test(maybeUserUrl)) {
+    return maybeUserUrl.match(ArenaUserRegex)[1];
+  }
+
+  return maybeUserUrl;
+}
+
 function parseRawContentsIntoCodaChannelContents(rawChannel: any): object {
+  return {
+    ...rawChannel,
+    image: rawChannel?.image?.display?.url,
+  };
+}
+
+function parseRawContentsIntoCodaChannel(rawChannel: any): object {
   return {
     ...rawChannel,
     image: rawChannel?.image?.display?.url,
@@ -284,6 +300,10 @@ function parseChannelIntoCodaChannel(channel): object {
   return { ...channel, description: channel.metadata?.description };
 }
 
+function parseUserIntoCodaUser(user): object {
+  return { ...user };
+}
+
 async function getChannel([channelInput], context: coda.ExecutionContext) {
   const channelId = maybeParseChannelIdentifierFromUrl(channelInput);
   const response = await context.fetcher.fetch({
@@ -292,6 +312,16 @@ async function getChannel([channelInput], context: coda.ExecutionContext) {
   });
   const item = response.body;
   return parseChannelIntoCodaChannel(item);
+}
+
+async function getUser([userInput], context: coda.ExecutionContext) {
+  const userId = maybeParseUserIdentifierFromUrl(userInput);
+  const response = await context.fetcher.fetch({
+    method: "GET",
+    url: apiUrl(`/users/${userId}`),
+  });
+  const item = response.body;
+  return parseUserIntoCodaUser(item);
 }
 
 export function apiUrl(path: string, params?: Record<string, any>): string {
@@ -304,11 +334,12 @@ function nextUrlFromResponse(
   params: Record<string, any>,
   response: coda.FetchResponse<any>
 ): string | undefined {
-  const { page, length, per } = response.body;
-  console.log("page, length, per", page, length, per);
-  if (page * per < length) {
-    console.log(page + 1);
-    return apiUrl(path, { ...params, page: page + 1 });
+  const { page, length, per, current_page } = response.body;
+  let finalPage = page || current_page;
+  console.log("page, length, per", finalPage, length, per);
+  if (finalPage * per < length) {
+    console.log(finalPage + 1);
+    return apiUrl(path, { ...params, page: finalPage + 1 });
   }
 }
 
@@ -344,23 +375,59 @@ async function getChannelContents(
   };
 }
 
-// pack.addSyncTable({
-//   name: "Channels",
-//   identityName: "Channels",
+async function listUserChannels([userInput], context: coda.ExecutionContext) {
+  const continuation = context.sync.continuation;
+  const userId = maybeParseUserIdentifierFromUrl(userInput);
+  const basePath = `/users/${userId}/channels`;
+  console.log(continuation);
+  const url = continuation
+    ? (continuation.nextUrl as string)
+    : apiUrl(basePath);
 
-//   formula: {
-//     name: "GetChannels",
-//     description: "Get list of all published channels",
-//     execute: listChannels,
-//   },
-//   // The resultType defines what will be returned in your Coda doc. Here, we're returning a simple text string.
-//   schema: highlightSchema,
-// });
+  const response = await context.fetcher.fetch({
+    method: "GET",
+    url,
+  });
+  const nextUrl = nextUrlFromResponse(basePath, {}, response);
+  const channelTitle = response.body.title;
+
+  console.log(nextUrl);
+
+  return {
+    result: response.body.channels.map((channel) =>
+      parseRawContentsIntoCodaChannel({
+        ...channel,
+        channel: channelTitle,
+      })
+    ),
+    continuation: nextUrl ? { nextUrl } : undefined,
+  };
+}
 
 const channelParameter = coda.makeParameter({
   name: "channel",
   type: coda.ParameterType.String,
   description: "The channel slug or ID",
+});
+
+const userParameter = coda.makeParameter({
+  name: "user",
+  type: coda.ParameterType.String,
+  description: "The username or ID",
+});
+
+pack.addSyncTable({
+  name: "UserChannels",
+  identityName: "UserChannels",
+
+  formula: {
+    name: "UserChannels",
+    description: "Get list of all the channels for a user",
+    parameters: [userParameter],
+    execute: listUserChannels,
+  },
+
+  schema: channel,
 });
 
 pack.addSyncTable({
@@ -389,6 +456,15 @@ pack.addFormula({
   execute: getChannel,
   resultType: coda.ValueType.Object,
   schema: channel,
+});
+
+pack.addFormula({
+  name: "User",
+  description: "Get a user by ID or slug",
+  parameters: [userParameter],
+  execute: getUser,
+  resultType: coda.ValueType.Object,
+  schema: collaboratorSchema,
 });
 
 pack.addColumnFormat({
