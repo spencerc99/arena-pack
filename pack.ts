@@ -253,10 +253,17 @@ const channel = coda.makeObjectSchema({
     owner: collaboratorSchema,
     user: collaboratorSchema,
   },
+  featuredProperties: [
+    "title",
+    "updated_at",
+    "created_at",
+    "description",
+    "share_link",
+  ],
 });
 // Regex to match https://www.are.na/chakra/speculative-emergent-world-building
-const ArenaChannelRegex = /[https:\/\/]?[www\.]?are\.na\/[\w-]+\/([\w-]+)/;
-const ArenaUserRegex = /[https:\/\/]?[www\.]?are\.na\/[\w-]+/;
+const ArenaChannelRegex = /(https:\/\/)?(www\.)?are\.na\/[\w-]+\/([\w-]+)/;
+const ArenaUserRegex = /(https:\/\/)?(www\.)?are\.na\/[\w-]+/;
 
 function maybeParseChannelIdentifierFromUrl(maybeChannelUrl: string): string {
   if (ArenaChannelRegex.test(maybeChannelUrl)) {
