@@ -432,6 +432,13 @@ const userParameter = coda.makeParameter({
   description: "The username or ID",
 });
 
+const channelVisibilityParameter = coda.makeParameter({
+  name: "channelVisibility",
+  type: coda.ParameterType.String,
+  description: "The visibility of the channel",
+  autocomplete: ["public", "closed", "private"],
+});
+
 pack.addSyncTable({
   name: "UserChannels",
   identityName: "UserChannels",
@@ -510,6 +517,36 @@ pack.addFormula({
   execute: getUser,
   resultType: coda.ValueType.Object,
   schema: collaboratorSchema,
+});
+
+async function updateChannelVisibility(
+  [channelInput, channelVisibility],
+  context: coda.ExecutionContext
+) {
+  const channelId = maybeParseChannelIdentifierFromUrl(channelInput);
+  const basePath = `/channels/${channelId}`;
+  if (!channelId) {
+    throw new coda.UserVisibleError("No channel ID found.");
+  }
+
+  await context.fetcher.fetch({
+    method: "PUT",
+    url: apiUrl(basePath),
+    body: JSON.stringify({
+      status: channelVisibility,
+    }),
+  });
+
+  return channelVisibility;
+}
+
+pack.addFormula({
+  name: "UpdateChannelVisibility",
+  description: "Update the visibility of a channel",
+  parameters: [channelParameter, channelVisibilityParameter],
+  execute: updateChannelVisibility,
+  resultType: coda.ValueType.String,
+  isAction: true,
 });
 
 pack.addColumnFormat({
