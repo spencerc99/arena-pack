@@ -156,6 +156,7 @@ const channelContent = coda.makeObjectSchema({
   },
   featuredProperties: [
     "description",
+    "content",
     "image",
     "source",
     "connected_by_username",
@@ -447,6 +448,35 @@ pack.addSyncTable({
   },
   // The resultType defines what will be returned in your Coda doc. Here, we're returning a simple text string.
   schema: channelContent,
+});
+
+pack.addDynamicSyncTable({
+  name: "ChannelContentsDynamic",
+  identityName: "ChannelContentDynamic",
+
+  formula: {
+    name: "GetChannelDynamic",
+    description: "get contents of a channel.",
+    // If your formula requires one or more inputs, you’ll define them here.
+    // Here, we're creating a string input called “name”.
+    parameters: [],
+
+    // Everything inside this execute statement will happen anytime your Coda function is called in a doc.
+    // An array of all user inputs is always the 1st parameter.
+    execute: async ([], context) =>
+      getChannelContents([context.sync.dynamicUrl], context),
+  },
+  // The resultType defines what will be returned in your Coda doc. Here, we're returning a simple text string.
+  getSchema: async () => {
+    return channelContent;
+  },
+  getName: async (context) => {
+    const channelInfo = await getChannel([context.sync.dynamicUrl], context);
+    return (channelInfo as any).title;
+  },
+  getDisplayUrl: async (context) => {
+    return context.sync.dynamicUrl;
+  },
 });
 
 pack.addFormula({
