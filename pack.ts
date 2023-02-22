@@ -314,6 +314,9 @@ function parseUserIntoCodaUser(user): object {
 
 async function getChannel([channelInput], context: coda.ExecutionContext) {
   const channelId = maybeParseChannelIdentifierFromUrl(channelInput);
+  if (!channelId) {
+    throw new coda.UserVisibleError("No userID found.");
+  }
   const response = await context.fetcher.fetch({
     method: "GET",
     url: apiUrl(`/channels/${channelId}`),
@@ -387,6 +390,10 @@ async function listUserChannels([userInput], context: coda.ExecutionContext) {
   const continuation = context.sync.continuation;
   const userId = maybeParseUserIdentifierFromUrl(userInput);
   const basePath = `/users/${userId}/channels`;
+  if (!userId) {
+    throw new coda.UserVisibleError("No userID found.");
+  }
+
   console.log(continuation);
   const url = continuation
     ? (continuation.nextUrl as string)
@@ -406,6 +413,7 @@ async function listUserChannels([userInput], context: coda.ExecutionContext) {
       parseRawContentsIntoCodaChannel({
         ...channel,
         channel: channelTitle,
+        url: `https://www.are.na/${userId}/${channel.slug}`,
       })
     ),
     continuation: nextUrl ? { nextUrl } : undefined,
